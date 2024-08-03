@@ -1,5 +1,10 @@
+import typer
+from typing import List
+from pathlib import Path
+from PIL import Image
+
 from pygments import highlight
-from pygments.formatters import ImageFormatter
+from pygments.formatters import ImageFormatter, SvgFormatter
 from pygments.lexers import RacketLexer
 from pygments.style import Style
 from pygments.token import (
@@ -66,30 +71,57 @@ class DrRacketStyle(Style):
         Error: "border:#FF0000",
     }
 
+# find ./ -name "*.rkt" | xargs -I {} python highlight.py {} --font-size=60
+def main(path: Path, 
+         font_size: int = typer.Option(default=60),
+         line_numbers: bool = typer.Option(default=False),
+         white_as_transparent: bool = typer.Option(default=True),
+         line_pad: int = typer.Option(default=4),
+         hl_lines: str = typer.Option(default="")):
+    # Racket source code
+    print(path)
+    if path.is_file():
+        print("is file")
+        racket_code = path.read_text()    
 
-# Racket source code
-racket_code = """
-> 1
-1
+        # Use Pygments to highlight the code
+        lexer = RacketLexer()
+        tokens = lexer.get_tokens(racket_code)
 
-(define (factorial n)
-    (if (zero? n)
-        1
-        (* n (factorial (- n 1)))))
-"""
+        for t in tokens:
+            print(t)
 
-# Use Pygments to highlight the code
-lexer = RacketLexer()
-tokens = lexer.get_tokens(racket_code)
+        # TODO: output svg too?
+        # REF: https://pygments.org/docs/formatters/#ImageFormatter
+        print(line_pad)
+        formatter = ImageFormatter(
+            style=DrRacketStyle,
+            # font_name="Ventura", 
+            font_size=font_size, 
+            line_numbers=line_numbers,
+            line_pad=line_pad,
+            hl_lines=hl_lines.split(",")
+        )
+        image_data = highlight(racket_code, lexer, formatter)
 
-for t in tokens:
-    print(t)
+        # Save the image data to a file
+        with open(f"./{path.stem}.png", "wb") as f:
+            f.write(image_data)   
 
-formatter = ImageFormatter(
-    style=DrRacketStyle, font_name="Courier New", font_size=28, line_numbers=False
-)
-image_data = highlight(racket_code, lexer, formatter)
+        if white_as_transparent:
+            img = Image.open(f"./{path.stem}.png")
+            img = img.convert("RGBA")
+            datas = img.getdata()
 
-# Save the image data to a file
-with open("racket_code.png", "wb") as f:
-    f.write(image_data)
+            newData = []
+            for item in datas:
+                if item[0] == 255 and item[1] == 255 and item[2] == 255:
+                    newData.append((255, 255, 255, 0))
+                else:
+                    newData.append(item)
+
+            img.putdata(newData)
+            img.save(f"./{path.stem}.png", "PNG")
+
+if __name__ == "__main__":
+    typer.run(main)
